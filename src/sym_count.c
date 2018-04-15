@@ -16,19 +16,30 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
+#define NUM_TO_REDUCE 2
+#define BUFFER_SIZE 512
 
 // Define globals
 int sym_cnt = 0;
 char in_symbol;
 int file_desc = -1;
+int pipe_fd = -1;
 
 
 void signal_term_handler(int signum) {
-	printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(),
-			in_symbol, sym_cnt);
 	// exit gracefully
-	close(file_desc); // close file
+	if (file_desc != -1) close(file_desc); // close file
+	if (pipe_fd != -1) close(pipe_fd);
 	exit(EXIT_SUCCESS);
+}
+
+int cnt_num(int number) {
+	int size = 0;
+	while (number) {
+		number /= 10;
+		size++;
+	}
+	return size;
 }
 
 int register_signal_term_handling() {
@@ -42,9 +53,8 @@ int register_signal_term_handling() {
 
 int handle_error_exit(const char* error_msg) {
 	// free fd
-	if (file_desc != -1) {
-		close(file_desc);
-	}
+	if (file_desc != -1) close(file_desc);
+	if (pipe_fd != -1) close(pipe_fd);
 	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errno));
 	return errno;
 }
@@ -135,10 +145,28 @@ int main(int argc, char** argv) {
     if (munmap(file_data, file_stat.st_size) == -1)
     	return handle_error_exit("Failed unmapping file");
 
+    // final report
+    if (argc == 4) {
+    	sscanf(argv[3], "%d", &pipe_fd);  // get pipe_fd
+        char* out_str = "Process %d finishes. Symbol %c. Instances %d.\n";
+        int base_out_str = strlen(out_str);
+        int cnt_process = cnt_num(getpid());
+        int cnt_sym = cnt_num(getpid());
+        int size_of_out_str = base_out_str + cnt_process + cnt_sym + 1 - (3 * NUM_TO_REDUCE);
+        char* msg_str = (char*)malloc(size_of_out_str * sizeof(char));
+        if (NULL == msg_str) {
+        	return handle_error_exit("Failed to allocate memory");
+        }
+        sprintf(msg_str, "Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
+        write(pipe_fd, msg_str, BUFFER_SIZE);
+        free(msg_str);
+        // TODO: maybe pass the size, and then the string
+    } else {
+    	printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
+    }
 
-    // final print
-    printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
     close(file_desc);
+    close(pipe_fd);
 
     exit(EXIT_SUCCESS);
 }
