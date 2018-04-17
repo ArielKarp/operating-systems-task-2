@@ -28,13 +28,15 @@ typedef struct {
 } ChildProc;
 
 
+ChildProc* list_of_processes = NULL;
+int number_of_processes = 0;
+
 void free_child_proc(ChildProc* ptr) {
 	if (NULL != ptr) {
 		free(ptr);
 		ptr = NULL;
 	}
 }
-
 
 int remove_process(ChildProc* list_of_processes, int index, int* number_of_processes) {
 	int rc = 1;
@@ -57,14 +59,30 @@ int remove_process(ChildProc* list_of_processes, int index, int* number_of_proce
 }
 
 
-void clean_up_remaining_processes(ChildProc* list_of_processes, int number_of_process) {
+void clean_up_remaining_processes(ChildProc* list_of_processes, int number_of_processes, int signal) {
 	// kill and free all child processes
 	int i = 0;
-	for (; i < number_of_process; i++) {
-		kill(list_of_processes[i].pid_num, SIGKILL);
+	for (; i < number_of_processes; i++) {
+		kill(list_of_processes[i].pid_num, signal);
 	}
 	free_child_proc(list_of_processes);
 }
+
+void signal_pipe_handler(int signum) {
+	// exit gracefully
+	clean_up_remaining_processes(list_of_processes, number_of_processes, SIGTERM);
+	free_child_proc(list_of_processes);
+	printf("SIGPIPE for Manager process %d. Leaving.\n", getpid());
+	exit(EXIT_FAILURE);
+}
+
+int register_signal_pipe_handling() {
+	struct sigaction new_pipe_action;
+	memset(&new_pipe_action, 0, sizeof(new_pipe_action));
+	new_pipe_action.sa_handler = signal_pipe_handler;
+	return sigaction(SIGPIPE, &new_pipe_action, NULL);
+}
+
 
 
 int main(int argc, char** argv) {
@@ -74,10 +92,16 @@ int main(int argc, char** argv) {
 		exit(EXIT_FAILURE);
 	}
 
+	if (register_signal_pipe_handling() != 0) {
+		printf("Signal pipe handle registration failed\n");
+		exit(EXIT_FAILURE);
+	}
+
+
 	char* path_to_file = argv[1];
 	char* pattern = argv[2];
-	int number_of_processes = strlen(pattern);
-	ChildProc* list_of_processes = (ChildProc*) calloc(number_of_processes,
+	number_of_processes = strlen(pattern);
+	list_of_processes = (ChildProc*) calloc(number_of_processes,
 			sizeof(ChildProc));
 	if (NULL == list_of_processes) {
 		printf("Failed to allocate memory\n");
@@ -97,7 +121,7 @@ int main(int argc, char** argv) {
 		char current_symbol[] = {pattern[i], '\0'};
 		// create the the pipe, pass it to the sym_count correctly
 		if (pipe(pipefd) == -1) {
-			clean_up_remaining_processes(list_of_processes, number_of_processes);
+			clean_up_remaining_processes(list_of_processes, number_of_processes, SIGKILL);
 			return errno;
 		}
 
@@ -136,18 +160,18 @@ int main(int argc, char** argv) {
 			int rc = waitpid(list_of_processes[i].pid_num, &r_status, WCONTINUED | WUNTRACED | WNOHANG);
 			if (rc == -1) { // waitpid failed
 				printf("Failed to waitpid: %s\n", strerror(errno));
-				clean_up_remaining_processes(list_of_processes, number_of_processes);
+				clean_up_remaining_processes(list_of_processes, number_of_processes, SIGKILL);
 				return errno;
 			}
 			// rc == pid_num
 			if (WIFEXITED(r_status)) { // process finished TODO: fix this
 				// read to correct pipefd
-				if ( (read_bytes = read(list_of_processes[i].pipe_num, buffer, BUFFER_SIZE)) > 0) {
+				if ((read_bytes = read(list_of_processes[i].pipe_num, buffer, BUFFER_SIZE)) > 0) {
 					buffer[read_bytes] = '\0';
 				}
 				if (read_bytes == -1) { // error in read
 					printf("Failed to read from pipe: %s\n", strerror(errno));
-					clean_up_remaining_processes(list_of_processes, number_of_processes);
+					clean_up_remaining_processes(list_of_processes, number_of_processes, SIGKILL);
 					return errno;
 				}
 				// print to std
@@ -156,9 +180,10 @@ int main(int argc, char** argv) {
 				// remove process
 				if (!remove_process(list_of_processes, i,
 						&number_of_processes)) {
-					clean_up_remaining_processes(list_of_processes, number_of_processes);
+					clean_up_remaining_processes(list_of_processes, number_of_processes, SIGKILL);
 					exit(EXIT_FAILURE);
 				}
+				// clear buffers
 				buffer[0] = '\0';
 				read_bytes = 0;
 			}
@@ -168,6 +193,7 @@ int main(int argc, char** argv) {
 		}
 		sleep(1);
 	}
+
 	free_child_proc(list_of_processes);
 	return EXIT_SUCCESS;
 }

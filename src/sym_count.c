@@ -17,29 +17,42 @@
 #include <fcntl.h>
 
 #define NUM_TO_REDUCE 2
-#define BUFFER_SIZE 512
 
 // Define globals
 int sym_cnt = 0;
 char in_symbol;
 int file_desc = -1;
 int pipe_fd = -1;
+char* file_data = NULL;
+int file_size;
+char* msg_str = NULL;
 
 
-void signal_term_handler(int signum) {
-	// exit gracefully
-	if (file_desc != -1) close(file_desc); // close file
-	if (pipe_fd != -1) close(pipe_fd);
-	exit(EXIT_SUCCESS);
-}
+// TODO: release in term and exit: mmap and msg_str
 
 int cnt_num(int number) {
+	if (number == 0) {
+		return 1;
+	}
 	int size = 0;
 	while (number) {
 		number /= 10;
 		size++;
 	}
 	return size;
+}
+
+void release_resources() {
+	if (file_desc != -1) close(file_desc); // close file
+	if (pipe_fd != -1) close(pipe_fd);  // close pipe
+	if (NULL != file_data) munmap(file_data, file_size);
+	if (NULL != msg_str) free(msg_str);
+}
+
+void signal_term_handler(int signum) {
+	// exit gracefully
+	release_resources();
+	exit(EXIT_SUCCESS);
 }
 
 int register_signal_term_handling() {
@@ -51,33 +64,46 @@ int register_signal_term_handling() {
 	return sigaction(SIGTERM, &new_tern_action, NULL);
 }
 
+void signal_pipe_handler(int signum) {
+	// exit gracefully
+	release_resources();
+	printf("SIGPIPE for process %d. Symbol %c. Counter %d.Leaving.\n", getpid(), in_symbol, sym_cnt);
+	exit(EXIT_SUCCESS);
+}
+
+int register_signal_pipe_handling() {
+	struct sigaction new_pipe_action;
+	memset(&new_pipe_action, 0, sizeof(new_pipe_action));
+
+	new_pipe_action.sa_handler = signal_pipe_handler;
+
+	return sigaction(SIGPIPE, &new_pipe_action, NULL);
+}
+
 int handle_error_exit(const char* error_msg) {
 	// free fd
-	if (file_desc != -1) close(file_desc);
-	if (pipe_fd != -1) close(pipe_fd);
+	release_resources();
 	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errno));
 	return errno;
 }
 
 int main(int argc, char** argv) {
 	if (argc != 3 && argc != 4) {
-		//printf("Invalid input for the program, exiting...\n");
-		//exit(EXIT_FAILURE);
 		return handle_error_exit("Invalid input for the program, exiting");
 	}
 
 	//register signals
 	if (register_signal_term_handling() != 0) {
-		//printf("Signal term handle registration failed: %s\n", strerror(errno));
-		//return errno;
 		return handle_error_exit("Signal term handle registration failed");
+	}
+
+	if (register_signal_pipe_handling() != 0) {
+		return handle_error_exit("Signal pipe handle registration failed");
 	}
 
 	// check second argument is a single char
 	if (strlen(argv[2]) != 1) {
 		// more than a single char
-		//close(file_desc);
-		//exit(EXIT_FAILURE);
 		return handle_error_exit("Second argument is not of length 1");
 	}
 
@@ -92,29 +118,24 @@ int main(int argc, char** argv) {
 	file_desc = open(file_name, O_RDWR, 0600);
 
 	if (file_desc < 0) {
-		//printf("Error opening file: %s\n", strerror( errno));
-		//return errno;
 		return handle_error_exit("Error opening file");
 	}
 
 
 	if (stat(file_name, &file_stat)  == -1) {
-		//printf("Failed to retrieve stat data: %s\n", strerror(errno));
-		//close(file_desc);
-		//return errno;
 		return handle_error_exit("Failed to retrieve stat data");
 	}
 
+
 	// check if regular file
 	if (!S_ISREG(file_stat.st_mode)) {
-		//printf("Not a regular file, exiting...\n");
-		//close(file_desc);
-		//exit(EXIT_FAILURE);
 		return handle_error_exit("Not a regular file, exiting");
 	}
 
+	file_size = file_stat.st_size;
+
     // set file size
-    if (lseek(file_desc, file_stat.st_size - 1, SEEK_SET) == -1)
+    if (lseek(file_desc, file_size - 1, SEEK_SET) == -1)
     	return handle_error_exit("Failed stretching file to required size");
 
     // write last byte
@@ -122,7 +143,7 @@ int main(int argc, char** argv) {
     	return handle_error_exit("Failed writing last byte");
 
 	// load mmap
-    char* file_data = (char*) mmap( NULL, file_stat.st_size,
+    file_data = (char*) mmap( NULL, file_size,
                         PROT_READ | PROT_WRITE,
                         MAP_SHARED,
 						file_desc,
@@ -134,7 +155,7 @@ int main(int argc, char** argv) {
     //main loop
     int i = 0;
     char current_symbol;
-    for(; i < file_stat.st_size; i++) {
+    for(; i < file_size; i++) {
     	current_symbol = file_data[i];  // get current char
     	if (current_symbol == in_symbol) {
     		sym_cnt++;
@@ -142,7 +163,7 @@ int main(int argc, char** argv) {
     }
 
     // free data
-    if (munmap(file_data, file_stat.st_size) == -1)
+    if (munmap(file_data, file_size) == -1)
     	return handle_error_exit("Failed unmapping file");
 
     // final report
@@ -151,16 +172,15 @@ int main(int argc, char** argv) {
         char* out_str = "Process %d finishes. Symbol %c. Instances %d.\n";
         int base_out_str = strlen(out_str);
         int cnt_process = cnt_num(getpid());
-        int cnt_sym = cnt_num(getpid());
+        int cnt_sym = cnt_num(sym_cnt);
         int size_of_out_str = base_out_str + cnt_process + cnt_sym + 1 - (3 * NUM_TO_REDUCE);
-        char* msg_str = (char*)malloc(size_of_out_str * sizeof(char));
+        msg_str = (char*)malloc(size_of_out_str * sizeof(char));
         if (NULL == msg_str) {
         	return handle_error_exit("Failed to allocate memory");
         }
         sprintf(msg_str, "Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
-        write(pipe_fd, msg_str, BUFFER_SIZE);
+        write(pipe_fd, msg_str, size_of_out_str);
         free(msg_str);
-        // TODO: maybe pass the size, and then the string
     } else {
     	printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
     }
