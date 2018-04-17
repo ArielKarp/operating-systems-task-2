@@ -28,8 +28,6 @@ int file_size;
 char* msg_str = NULL;
 
 
-// TODO: release in term and exit: mmap and msg_str
-
 int cnt_num(int number) {
 	if (number == 0) {
 		return 1;

@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
 				return errno;
 			}
 			// rc == pid_num
-			if (WIFEXITED(r_status)) { // process finished TODO: fix this
+			if (WIFEXITED(r_status)) { // process finished
 				// read to correct pipefd
 				if ((read_bytes = read(list_of_processes[i].pipe_num, buffer, BUFFER_SIZE)) > 0) {
 					buffer[read_bytes] = '\0';
@@ -176,7 +176,6 @@ int main(int argc, char** argv) {
 				}
 				// print to std
 				printf("%s", buffer);
-
 				// remove process
 				if (!remove_process(list_of_processes, i,
 						&number_of_processes)) {
@@ -193,7 +192,6 @@ int main(int argc, char** argv) {
 		}
 		sleep(1);
 	}
-
 	free_child_proc(list_of_processes);
 	return EXIT_SUCCESS;
 }
