@@ -27,7 +27,6 @@ char* file_data = NULL;
 int file_size;
 char* msg_str = NULL;
 
-
 int cnt_num(int number) {
 	if (number == 0) {
 		return 1;
@@ -41,10 +40,14 @@ int cnt_num(int number) {
 }
 
 void release_resources() {
-	if (file_desc != -1) close(file_desc); // close file
-	if (pipe_fd != -1) close(pipe_fd);  // close pipe
-	if (NULL != file_data) munmap(file_data, file_size);
-	if (NULL != msg_str) free(msg_str);
+	if (file_desc != -1)
+		close(file_desc); // close file
+	if (pipe_fd != -1)
+		close(pipe_fd);  // close pipe
+	if (NULL != file_data)
+		munmap(file_data, file_size);
+	if (NULL != msg_str)
+		free(msg_str);
 }
 
 void signal_term_handler(int signum) {
@@ -65,7 +68,8 @@ int register_signal_term_handling() {
 void signal_pipe_handler(int signum) {
 	// exit gracefully
 	release_resources();
-	printf("SIGPIPE for process %d. Symbol %c. Counter %d.Leaving.\n", getpid(), in_symbol, sym_cnt);
+	printf("SIGPIPE for process %d. Symbol %c. Counter %d.Leaving.\n", getpid(),
+			in_symbol, sym_cnt);
 	exit(EXIT_SUCCESS);
 }
 
@@ -79,7 +83,6 @@ int register_signal_pipe_handling() {
 }
 
 int handle_error_exit(const char* error_msg) {
-	// free fd
 	release_resources();
 	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errno));
 	return errno;
@@ -119,11 +122,9 @@ int main(int argc, char** argv) {
 		return handle_error_exit("Error opening file");
 	}
 
-
-	if (stat(file_name, &file_stat)  == -1) {
+	if (stat(file_name, &file_stat) == -1) {
 		return handle_error_exit("Failed to retrieve stat data");
 	}
-
 
 	// check if regular file
 	if (!S_ISREG(file_stat.st_mode)) {
@@ -132,66 +133,67 @@ int main(int argc, char** argv) {
 
 	file_size = file_stat.st_size;
 
-    // set file size
-    if (lseek(file_desc, file_size - 1, SEEK_SET) == -1)
-    	return handle_error_exit("Failed stretching file to required size");
+	// set file size
+	if (lseek(file_desc, file_size - 1, SEEK_SET) == -1)
+		return handle_error_exit("Failed stretching file to required size");
 
-    // write last byte
-    if (write(file_desc, "\0", 1) == -1)
-    	return handle_error_exit("Failed writing last byte");
+	// write last byte
+	if (write(file_desc, "\0", 1) == -1)
+		return handle_error_exit("Failed writing last byte");
 
 	// load mmap
-    file_data = (char*) mmap( NULL, file_size,
-                        PROT_READ | PROT_WRITE,
-                        MAP_SHARED,
-						file_desc,
-                        0 );
+	file_data = (char*) mmap( NULL, file_size,
+	PROT_READ | PROT_WRITE,
+	MAP_SHARED, file_desc, 0);
 
-    if (file_data == MAP_FAILED)
-    	return handle_error_exit("Failed mapping file to memory");
+	if (file_data == MAP_FAILED)
+		return handle_error_exit("Failed mapping file to memory");
 
-    //main loop
-    int i = 0;
-    char current_symbol;
-    for(; i < file_size; i++) {
-    	current_symbol = file_data[i];  // get current char
-    	if (current_symbol == in_symbol) {
-    		sym_cnt++;
-    	}
-    }
+	//main loop
+	int i = 0;
+	char current_symbol;
+	for (; i < file_size; i++) {
+		current_symbol = file_data[i];  // get current char
+		if (current_symbol == in_symbol) {
+			sym_cnt++;
+		}
+	}
 
-    // free data
-    if (munmap(file_data, file_size) == -1)
-    	return handle_error_exit("Failed unmapping file");
+	// free data
+	if (munmap(file_data, file_size) == -1)
+		return handle_error_exit("Failed unmapping file");
 
-    // final report
-    if (argc == 4) {
-    	sscanf(argv[3], "%d", &pipe_fd);  // get pipe_fd
-        char* out_str = "Process %d finishes. Symbol %c. Instances %d.\n";
-        int base_out_str = strlen(out_str);
-        int cnt_process = cnt_num(getpid());
-        int cnt_sym = cnt_num(sym_cnt);
-        int size_of_out_str = base_out_str + cnt_process + cnt_sym + 1 - (3 * NUM_TO_REDUCE);
-        msg_str = (char*)malloc(size_of_out_str * sizeof(char));
-        if (NULL == msg_str) {
-        	return handle_error_exit("Failed to allocate memory");
-        }
-        sprintf(msg_str, "Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
-        write(pipe_fd, msg_str, size_of_out_str);
-        free(msg_str);
-    } else {
-    	printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(), in_symbol, sym_cnt);
-    }
+	// final report
+	if (argc == 4) {
+		sscanf(argv[3], "%d", &pipe_fd);  // get pipe_fd
+		char* out_str = "Process %d finishes. Symbol %c. Instances %d.\n";
+		int base_out_str = strlen(out_str);
+		int cnt_process = cnt_num(getpid());
+		int cnt_sym = cnt_num(sym_cnt);
+		int size_of_out_str = base_out_str + cnt_process + cnt_sym + 1
+				- (3 * NUM_TO_REDUCE);
+		msg_str = (char*) malloc(size_of_out_str * sizeof(char));
+		if (NULL == msg_str) {
+			return handle_error_exit("Failed to allocate memory");
+		}
+		sprintf(msg_str, "Process %d finishes. Symbol %c. Instances %d.\n",
+				getpid(), in_symbol, sym_cnt);
+		if (write(pipe_fd, msg_str, size_of_out_str) == -1) {
+			return handle_error_exit("Failed to write message to pipe");
+		}
+		free(msg_str);
+	} else {
+		printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(),
+				in_symbol, sym_cnt);
+	}
 
-    close(file_desc);
-    close(pipe_fd);
+	if (close(file_desc) == -1) {
+		return handle_error_exit("Failed to close file descriptor");
+	}
+	if (close(pipe_fd) == -1) {
+		return handle_error_exit("Failed to close pipe file descriptor");
+	}
 
-    exit(EXIT_SUCCESS);
+	exit(EXIT_SUCCESS);
 }
-
-
-
-
-
-
 
