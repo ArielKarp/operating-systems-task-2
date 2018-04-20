@@ -88,7 +88,7 @@ int register_signal_pipe_handling() {
 }
 
 int handle_error_and_exit(const char* error_msg) {
-	clean_up_remaining_processes(list_of_processes, number_of_processes, SIGKILL);
+	clean_up_remaining_processes(list_of_processes, number_of_processes, SIGTERM);
 	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errno));
 	return errno;
 }
@@ -128,8 +128,7 @@ int main(int argc, char** argv) {
 		char current_symbol[] = { pattern[i], '\0' };
 		// create the the pipe, pass it to the sym_count correctly
 		if (pipe(pipefd) == -1) {
-			clean_up_remaining_processes(list_of_processes, number_of_processes, SIGKILL);
-			return errno;
+			return handle_error_and_exit("Failed to pipe");
 		}
 
 		father_pipefd = pipefd[0];  // mng is a reader
@@ -137,7 +136,7 @@ int main(int argc, char** argv) {
 		child_pipe_str[0] = '\0';
 		sprintf(child_pipe_str, "%d", child_pipefd);
 		char* exec_args[] = { name_of_process, path_to_file, current_symbol, child_pipe_str, NULL };
-		if ((current_proc = fork()) == 0) {
+		if ((current_proc = fork()) == 0) {  // child proc
 			if (close(father_pipefd) == -1) {
 				printf("Failed to close pipe fd: %s\n", strerror(errno));
 				return errno;
@@ -190,6 +189,7 @@ int main(int argc, char** argv) {
 				buffer[0] = '\0';
 				read_bytes = 0;
 			}
+			// TODO: add if exited
 		}
 		if (number_of_processes == 0) { // finished running
 			still_running = 0;
