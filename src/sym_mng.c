@@ -75,7 +75,6 @@ void signal_pipe_handler(int signum) {
 	// exit gracefully
 	clean_up_remaining_processes(list_of_processes, number_of_processes,
 			SIGTERM);
-	free_child_proc(list_of_processes);
 	printf("SIGPIPE for Manager process %d. Leaving.\n", getpid());
 	exit(EXIT_FAILURE);
 }

@@ -53,7 +53,7 @@ void release_resources() {
 void signal_term_handler(int signum) {
 	// exit gracefully
 	release_resources();
-	exit(EXIT_SUCCESS);
+	exit(EXIT_FAILURE);
 }
 
 int register_signal_term_handling() {
@@ -70,7 +70,7 @@ void signal_pipe_handler(int signum) {
 	release_resources();
 	printf("SIGPIPE for process %d. Symbol %c. Counter %d.Leaving.\n", getpid(),
 			in_symbol, sym_cnt);
-	exit(EXIT_SUCCESS);
+	exit(EXIT_FAILURE);
 }
 
 int register_signal_pipe_handling() {
@@ -83,9 +83,10 @@ int register_signal_pipe_handling() {
 }
 
 int handle_error_exit(const char* error_msg) {
+	int errsv = errno;
 	release_resources();
-	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errno));
-	return errno;
+	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errsv));
+	return errsv;
 }
 
 int main(int argc, char** argv) {
@@ -148,7 +149,7 @@ int main(int argc, char** argv) {
 
 	if (file_data == MAP_FAILED)
 		return handle_error_exit("Failed mapping file to memory");
-
+	sleep(10);
 	//main loop
 	int i = 0;
 	char current_symbol;
