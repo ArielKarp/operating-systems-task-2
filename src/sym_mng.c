@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
 		int i = 0;
 		for (; i < number_of_processes; i++) {
 			int r_status = -1;
-			int rc = waitpid(list_of_processes[i].pid_num, &r_status, WCONTINUED | WUNTRACED | WNOHANG);
+			int rc = waitpid(list_of_processes[i].pid_num, &r_status, WNOHANG);
 			if (rc == -1) { // waitpid failed
 				return handle_error_and_exit("Failed to waitpid");
 			}

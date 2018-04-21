@@ -182,6 +182,9 @@ int main(int argc, char** argv) {
 			return handle_error_exit("Failed to write message to pipe");
 		}
 		free(msg_str);
+		if (close(pipe_fd) == -1) {
+			return handle_error_exit("Failed to close pipe file descriptor");
+		}
 	} else {
 		printf("Process %d finishes. Symbol %c. Instances %d.\n", getpid(),
 				in_symbol, sym_cnt);
@@ -189,9 +192,6 @@ int main(int argc, char** argv) {
 
 	if (close(file_desc) == -1) {
 		return handle_error_exit("Failed to close file descriptor");
-	}
-	if (close(pipe_fd) == -1) {
-		return handle_error_exit("Failed to close pipe file descriptor");
 	}
 
 	exit(EXIT_SUCCESS);
