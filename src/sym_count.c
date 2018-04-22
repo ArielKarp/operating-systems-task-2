@@ -86,6 +86,10 @@ int handle_error_exit(const char* error_msg) {
 	int errsv = errno;
 	release_resources();
 	printf("Error message: [%s] | ERRNO: [%s]\n", error_msg, strerror(errsv));
+	if (errsv == 0) {
+		// in case error did not change errno
+		return EXIT_FAILURE;
+	}
 	return errsv;
 }
 
