@@ -145,11 +145,11 @@ int main(int argc, char** argv) {
 	// load mmap
 	file_data = (char*) mmap( NULL, file_size,
 	PROT_READ | PROT_WRITE,
-	MAP_SHARED, file_desc, 0);
+	MAP_PRIVATE, file_desc, 0);
 
 	if (file_data == MAP_FAILED)
 		return handle_error_exit("Failed mapping file to memory");
-	sleep(10);
+
 	//main loop
 	int i = 0;
 	char current_symbol;

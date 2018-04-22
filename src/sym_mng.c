@@ -171,22 +171,29 @@ int main(int argc, char** argv) {
 			}
 			// rc == pid_num
 			if (WIFEXITED(r_status)) { // process finished
-				// read to correct pipefd
-				if ((read_bytes = read(list_of_processes[i].pipe_num, buffer, BUFFER_SIZE)) > 0) {
-					buffer[read_bytes] = '\0';
+				if (r_status == 0) { // exit status is O.K
+					// read to correct pipefd
+					if ((read_bytes = read(list_of_processes[i].pipe_num, buffer, BUFFER_SIZE)) > 0) {
+						buffer[read_bytes] = '\0';
+					}
+					if (read_bytes == -1) { // error in read
+						return handle_error_and_exit("Failed to read from pipe");
+					}
+					// print to std
+					printf("%s", buffer);
+					// remove process
+					if (!remove_process(list_of_processes, i, &number_of_processes)) {
+						return handle_error_and_exit("Failed to remove process");
+					}
+					// clear buffers
+					buffer[0] = '\0';
+					read_bytes = 0;
+				} else {
+					// exit status is failure, remove process
+					if (!remove_process(list_of_processes, i, &number_of_processes)) {
+						return handle_error_and_exit("Failed to remove process");
+					}
 				}
-				if (read_bytes == -1) { // error in read
-					return handle_error_and_exit("Failed to read from pipe");
-				}
-				// print to std
-				printf("%s", buffer);
-				// remove process
-				if (!remove_process(list_of_processes, i, &number_of_processes)) {
-					return handle_error_and_exit("Failed to remove process");
-				}
-				// clear buffers
-				buffer[0] = '\0';
-				read_bytes = 0;
 			}
 			// TODO: add if exited
 		}
