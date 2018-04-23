@@ -195,7 +195,6 @@ int main(int argc, char** argv) {
 					}
 				}
 			}
-			// TODO: add if exited
 		}
 		if (number_of_processes == 0) { // finished running
 			still_running = 0;
